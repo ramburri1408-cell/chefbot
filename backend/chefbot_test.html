@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChefBot Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #fafaf9; }
+    h2 { color: #7B3F20; }
+    #chat { border: 1px solid #ddd; border-radius: 8px; padding: 16px; min-height: 300px; max-height: 500px; overflow-y: auto; background: white; margin-bottom: 12px; }
+    .msg { margin: 8px 0; padding: 8px 12px; border-radius: 8px; max-width: 85%; }
+    .user { background: #7B3F20; color: white; margin-left: auto; text-align: right; }
+    .bot { background: #f0ece8; color: #222; }
+    .dish { background: #fff8f0; border: 1px solid #e8d5c0; border-radius: 6px; padding: 8px 12px; margin: 4px 0; font-size: 13px; }
+    .dish strong { color: #7B3F20; }
+    #input-row { display: flex; gap: 8px; }
+    #msg { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    button { background: #7B3F20; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    button:disabled { opacity: 0.5; }
+    #status { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .sugg { background: #f5f0eb; border: 1px solid #ddd; border-radius: 20px; padding: 5px 12px; cursor: pointer; font-size: 12px; color: #555; }
+    .sugg:hover { background: #ede6de; }
+  </style>
+</head>
+<body>
+  <h2>🍰 ChefBot — Cheesecake Factory Menu Assistant</h2>
+  <div id="status">Connecting...</div>
+  <div class="suggestions">
+    <span class="sugg" onclick="quickSend('I want something light and high protein')">Light + high protein</span>
+    <span class="sugg" onclick="quickSend('Under 600 calories, filling')">Under 600 cal</span>
+    <span class="sugg" onclick="quickSend('Something rich and indulgent for date night')">Date night</span>
+    <span class="sugg" onclick="quickSend('Vegetarian options?')">Vegetarian</span>
+    <span class="sugg" onclick="quickSend('What has the most protein?')">Highest protein</span>
+  </div>
+  <div id="chat"></div>
+  <div id="input-row">
+    <input id="msg" type="text" placeholder="Tell me what you're in the mood for..." onkeydown="if(event.key==='Enter') send()" />
+    <button onclick="send()" id="btn">Send</button>
+  </div>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const status = document.getElementById('status');
+    const btn = document.getElementById('btn');
+    let ws, currentBotDiv = null;
+
+    function connect() {
+      ws = new WebSocket('ws://localhost:8000/ws/chat');
+
+      ws.onopen = () => { status.textContent = 'Connected'; };
+      ws.onclose = () => {
+        status.textContent = 'Disconnected — refresh to reconnect';
+        btn.disabled = true;
+      };
+      ws.onerror = () => { status.textContent = 'Connection error'; };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+
+        if (msg.type === 'session') {
+          status.textContent = 'Connected | Session: ' + msg.session_id.slice(0, 8) + '...';
+
+        } else if (msg.type === 'token') {
+          if (!currentBotDiv) {
+            currentBotDiv = document.createElement('div');
+            currentBotDiv.className = 'msg bot';
+            chat.appendChild(currentBotDiv);
+          }
+          currentBotDiv.textContent += msg.content;
+          chat.scrollTop = chat.scrollHeight;
+
+        } else if (msg.type === 'dishes') {
+          const container = document.createElement('div');
+          msg.content.forEach(d => {
+            const card = document.createElement('div');
+            card.className = 'dish';
+            card.innerHTML = `<strong>${d.name}</strong> &nbsp; ${d.calories} cal &nbsp; ${d.protein_g}g protein &nbsp; $${d.price}`;
+            container.appendChild(card);
+          });
+          chat.appendChild(container);
+          chat.scrollTop = chat.scrollHeight;
+
+        } else if (msg.type === 'done') {
+          currentBotDiv = null;
+          btn.disabled = false;
+
+        } else if (msg.type === 'error') {
+          const div = document.createElement('div');
+          div.className = 'msg bot';
+          div.style.color = 'red';
+          div.textContent = msg.content;
+          chat.appendChild(div);
+          btn.disabled = false;
+        }
+      };
+    }
+
+    function addUserMsg(text) {
+      const div = document.createElement('div');
+      div.className = 'msg user';
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function send() {
+      const input = document.getElementById('msg');
+      const text = input.value.trim();
+      if (!text || ws.readyState !== WebSocket.OPEN) return;
+      addUserMsg(text);
+      input.value = '';
+      btn.disabled = true;
+      currentBotDiv = null;
+      ws.send(JSON.stringify({ message: text }));
+    }
+
+    function quickSend(text) {
+      document.getElementById('msg').value = text;
+      send();
+    }
+
+    connect();
+  </script>
+</body>
+</html>

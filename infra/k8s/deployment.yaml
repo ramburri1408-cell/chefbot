@@ -1,0 +1,106 @@
+# infra/k8s/deployment.yaml
+# Backend pods — HPA scales on CPU; 3 replicas minimum for HA
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chefbot-backend
+  labels:
+    app: chefbot
+    tier: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: chefbot
+      tier: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:       1
+      maxUnavailable: 0  # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: chefbot
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: chefbot/backend:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chefbot-secrets
+                  key: anthropic-api-key
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: chefbot-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: chefbot-secrets
+                  key: redis-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chefbot-secrets
+                  key: jwt-secret
+            - name: VECTOR_STORE
+              value: "pinecone"
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "512Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chefbot-backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chefbot-backend
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chefbot-backend
+spec:
+  selector:
+    app: chefbot
+    tier: backend
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
