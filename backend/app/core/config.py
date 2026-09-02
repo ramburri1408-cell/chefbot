@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Security
     jwt_secret: str
-    allowed_origins: list[str] = ["http://localhost:3000"]
+    allowed_origins: str = "*"
 
     # Rate limiting
     rate_limit_per_minute: int = 30
