@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
     # CORS — must be first in stack
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.allowed_origins,
+        allow_origins=settings.allowed_origins.split(",") if settings.allowed_origins != "*" else ["*"],
         allow_credentials=True,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
